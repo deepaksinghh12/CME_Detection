@@ -1,0 +1,42 @@
+# Real Data Synchronization Requirements
+
+# Core dependencies
+aiohttp>=3.8.0
+requests>=2.28.0
+pandas>=1.5.0
+numpy>=1.21.0
+PyYAML>=6.0
+
+# CDF file handling (choose one)
+spacepy>=0.4.0  # Preferred for NASA CDF files
+# OR
+cdflib>=0.4.0   # Alternative CDF library
+
+# Database
+sqlalchemy>=1.4.0
+psycopg2-binary>=2.9.0
+alembic>=1.8.0
+
+# Data processing
+scipy>=1.9.0
+scikit-learn>=1.1.0
+
+# Async support
+asyncio
+asyncpg>=0.26.0  # For async PostgreSQL
+
+# Logging and monitoring
+structlog>=22.0.0
+python-dotenv>=0.19.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.19.0
+httpx>=0.23.0  # For testing async HTTP
+
+# Optional: For enhanced data processing
+h5py>=3.7.0    # For HDF5 data files
+netCDF4>=1.6.0  # For NetCDF data files
+astropy>=5.0.0  # For astronomical data processing
+plotly>=5.0.0  # For interactive plotting
+pywavelets>=1.3.0  # For wavelet analysis

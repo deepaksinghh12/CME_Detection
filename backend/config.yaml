@@ -1,0 +1,57 @@
+# Configuration file for Halo CME Detection System
+
+# Data paths
+data_paths:
+  swis_data_dir: "../data/swis/"
+  cactus_data_dir: "../data/cactus/"
+  output_dir: "../results/"
+  
+# CACTUS CME database settings
+cactus:
+  base_url: "https://wwwbis.sidc.be/cactus/catalog/LASCO/"
+  halo_angle_threshold: 270  # degrees (halo CMEs > 270°)
+  date_range:
+    start: "2024-08-01"
+    end: "2024-12-31"
+
+# SWIS data processing parameters
+swis_processing:
+  quality_flags:
+    valid_range_velocity: [200, 1200]  # km/s
+    valid_range_density: [0.1, 100]    # cm^-3
+    valid_range_temperature: [10000, 10000000]  # K
+    valid_range_flux: [0, 1000000000000]  # particles/(cm^2*s)
+    max_gap_minutes: 30
+    outlier_threshold_sigma: 5
+  
+  # Time windows for CME analysis
+  time_windows:
+    pre_event_hours: 24   # Hours before CME
+    post_event_hours: 72  # Hours after CME
+    baseline_days: 7      # Days for baseline calculation
+
+# CME detection thresholds
+detection_thresholds:
+  velocity_enhancement: 2.5      # Z-score threshold
+  density_enhancement: 2.0       # Z-score threshold
+  temperature_anomaly: 2.0       # Z-score threshold
+  combined_score_threshold: 2    # Minimum combined score
+  
+  # Shock detection parameters
+  shock_detection:
+    velocity_jump_threshold: 100  # km/s
+    density_jump_threshold: 2.0   # ratio
+    temperature_ratio_threshold: 0.5  # ratio
+
+# Visualization settings
+visualization:
+  figure_size: [12, 8]
+  dpi: 300
+  style: "seaborn-v0_8"
+  colors:
+    velocity: "#1f77b4"
+    density: "#ff7f0e"
+    temperature: "#2ca02c"
+    flux: "#d62728"
+    cme_events: "#ff0000"
+  
