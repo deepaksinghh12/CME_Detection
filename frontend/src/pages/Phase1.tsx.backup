@@ -1,0 +1,956 @@
+/**
+ * Phase 1: Live Space Weather Data - Scientist Grade
+ * 
+ * Features:
+ * - 4-grid layout with comprehensive data visualization
+ * - Parameter selector with auto-rotate (20 seconds)
+ * - Real-time graphs and animations
+ * - Parameter-specific animations (heavy/light based on parameter)
+ * - Dynamic effects grid based on current values
+ * - Space weather alerts with toast notifications
+ * - Scientist-grade detailed analysis
+ */
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ChevronLeft, ChevronRight, Loader2, AlertTriangle, 
+  Activity, Gauge, Wind, Zap, TrendingUp, Sun, 
+  Satellite, Navigation, Radio, Power, Sparkles,
+  Image as ImageIcon, Flame, MapPin, Compass
+} from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { toast } from '@/components/ui/sonner';
+import { api } from '@/lib/api';
+import ParameterSpecificAnimation from '@/components/ParameterSpecificAnimation';
+import { getDynamicParameterInfo, type ParameterData } from './Phase1Helpers';
+
+const Phase1: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const [selectedParam, setSelectedParam] = useState(0);
+  const [realtimeData, setRealtimeData] = useState<any>(null);
+  const [geomagneticData, setGeomagneticData] = useState<any>(null);
+  const [alertsData, setAlertsData] = useState<any>(null);
+  const [solarFlaresData, setSolarFlaresData] = useState<any>(null);
+  const [lascoImages, setLascoImages] = useState<any>(null);
+  const [suviImages, setSuviImages] = useState<any>(null);
+
+  // Define all parameters with comprehensive data
+  const parameters: ParameterData[] = [
+    {
+      name: 'Kp Index',
+      fullForm: 'Planetary K-index',
+      value: geomagneticData?.indices?.Kp ?? null,
+      unit: '',
+      range: { min: 0, max: 9 },
+      average: 2.5,
+      limit: { normal: 4, warning: 5, danger: 7 },
+      definition: 'Shows how much Earth\'s magnetic field is disturbed. Higher numbers mean stronger storms.',
+      detailedInfo: 'Scale 0-9. Values above 5 mean moderate storms, above 7 mean severe storms that can affect power grids and satellites.',
+      graphData: geomagneticData?.timeline?.map((d: any) => ({ time: new Date(d.timestamp).toLocaleTimeString(), value: d.Kp })) || [],
+      effects: ['Geomagnetic activity', 'Aurora visibility', 'Satellite operations'],
+      causes: ['Solar wind variations', 'CME impacts', 'High-speed streams'],
+      safe: ['Normal operations', 'No precautions needed'],
+      notSafe: ['Monitor satellite operations', 'GPS accuracy may degrade'],
+      alerts: [],
+      color: '#f59e0b',
+      animationType: 'geomagnetic',
+      kp: geomagneticData?.indices?.Kp,
+      dst: geomagneticData?.indices?.Dst
+    },
+    {
+      name: 'DST Index',
+      fullForm: 'Disturbance Storm Time Index',
+      value: geomagneticData?.indices?.Dst ?? null,
+      unit: 'nT',
+      range: { min: -500, max: 50 },
+      average: -10,
+      limit: { normal: -30, warning: -50, danger: -100 },
+      definition: 'Measures how strong the ring current around Earth is. More negative = stronger storm.',
+      detailedInfo: 'Negative values mean a stronger ring current. Values below -100 nT indicate extreme storms that can cause power outages.',
+      graphData: geomagneticData?.timeline?.map((d: any) => ({ time: new Date(d.timestamp).toLocaleTimeString(), value: d.Dst })) || [],
+      effects: ['Ring current intensity', 'Geomagnetic storm level', 'Radiation belt dynamics'],
+      causes: ['Solar wind pressure', 'Southward IMF', 'CME arrival'],
+      safe: ['Stable magnetosphere', 'Normal conditions'],
+      notSafe: ['Power grid impacts', 'Satellite charging'],
+      alerts: [],
+      color: '#ef4444',
+      animationType: 'geomagnetic',
+      kp: geomagneticData?.indices?.Kp,
+      dst: geomagneticData?.indices?.Dst
+    },
+    {
+      name: 'Solar Wind Speed',
+      fullForm: 'Solar Wind Bulk Velocity',
+      value: realtimeData?.speed ?? null,
+      unit: 'km/s',
+      range: { min: 200, max: 1200 },
+      average: 450,
+      limit: { normal: 600, warning: 700, danger: 900 },
+      definition: 'How fast particles from the Sun are moving towards Earth.',
+      detailedInfo: 'Normal speed: 300-500 km/s. Fast wind (500-800 km/s) comes from coronal holes. Speeds above 900 km/s can cause major storms.',
+      graphData: realtimeData?.history?.timestamps?.map((t: string, i: number) => ({
+        time: new Date(t).toLocaleTimeString(),
+        value: realtimeData.history.speed[i]
+      })) || [],
+      effects: ['Magnetosphere compression', 'Geomagnetic activity', 'Satellite drag'],
+      causes: ['Coronal holes', 'CMEs', 'Solar wind structures'],
+      safe: ['Normal solar wind', 'Stable conditions'],
+      notSafe: ['Enhanced geomagnetic activity', 'Increased drag on satellites'],
+      alerts: [],
+      color: '#10b981',
+      animationType: 'particle',
+      density: realtimeData?.density,
+      temperature: realtimeData?.temperature,
+      lon: realtimeData?.lon_gsm,
+      lat: realtimeData?.lat_gsm
+    },
+    {
+      name: 'Solar Wind Density',
+      fullForm: 'Solar Wind Proton Density',
+      value: realtimeData?.density ?? null,
+      unit: 'p/cm³',
+      range: { min: 0, max: 50 },
+      average: 7,
+      limit: { normal: 15, warning: 25, danger: 40 },
+      definition: 'How many particles are in the solar wind. More particles = more pressure on Earth\'s magnetic field.',
+      detailedInfo: 'Normal: 3-10 particles per cubic centimeter. High density (above 25) often means a CME is passing by.',
+      graphData: realtimeData?.history?.timestamps?.map((t: string, i: number) => ({
+        time: new Date(t).toLocaleTimeString(),
+        value: realtimeData.history.density[i]
+      })) || [],
+      effects: ['Dynamic pressure', 'Magnetosphere compression'],
+      causes: ['Solar wind structures', 'CME plasma', 'Stream interfaces'],
+      safe: ['Normal density', 'Stable conditions'],
+      notSafe: ['Enhanced compression', 'Increased activity'],
+      alerts: [],
+      color: '#8b5cf6',
+      animationType: 'particle',
+      density: realtimeData?.density,
+      temperature: realtimeData?.temperature
+    },
+    {
+      name: 'Bz Component',
+      fullForm: 'IMF Bz (GSM coordinates)',
+      value: realtimeData?.bz_gsm ?? null,
+      unit: 'nT',
+      range: { min: -30, max: 30 },
+      average: 0,
+      limit: { normal: -5, warning: -10, danger: -15 },
+      definition: 'Direction of the magnetic field from the Sun. Negative (southward) = dangerous, allows energy to enter Earth.',
+      detailedInfo: 'When Bz is negative (southward), Earth\'s magnetic field can connect with the solar wind, causing storms. More negative = stronger connection.',
+      graphData: [],
+      effects: ['Magnetic reconnection', 'Energy coupling', 'Geomagnetic storm intensity'],
+      causes: ['Solar wind magnetic field', 'CME magnetic structure'],
+      safe: ['Northward or neutral', 'Magnetosphere protected'],
+      notSafe: ['Southward Bz', 'Enhanced storm risk'],
+      alerts: [],
+      color: '#ec4899',
+      animationType: 'particle',
+      bz: realtimeData?.bz_gsm,
+      bt: realtimeData?.bt
+    },
+    {
+      name: 'Bt (Total B)',
+      fullForm: 'Total IMF Magnitude',
+      value: realtimeData?.bt ?? null,
+      unit: 'nT',
+      range: { min: 0, max: 40 },
+      average: 6,
+      limit: { normal: 10, warning: 20, danger: 30 },
+      definition: 'Total strength of the magnetic field from the Sun. Higher values often mean a CME is coming.',
+      detailedInfo: 'Normal: 2-10 nT. Values above 20 nT usually mean a CME or compressed solar wind region is passing by.',
+      graphData: [],
+      effects: ['Solar wind structure', 'CME detection'],
+      causes: ['Solar wind variations', 'CME magnetic fields'],
+      safe: ['Normal IMF', 'Typical values'],
+      notSafe: ['Enhanced field', 'CME possible'],
+      alerts: [],
+      color: '#06b6d4',
+      animationType: 'particle',
+      bz: realtimeData?.bz_gsm,
+      bt: realtimeData?.bt
+    },
+    {
+      name: 'Bx Component',
+      fullForm: 'IMF Bx (GSM coordinates)',
+      value: realtimeData?.bx_gsm ?? null,
+      unit: 'nT',
+      range: { min: -20, max: 20 },
+      average: 0,
+      limit: { normal: 5, warning: 10, danger: 15 },
+      definition: 'East-west component of the Sun\'s magnetic field. Helps determine the overall field structure.',
+      detailedInfo: 'Part of the 3D magnetic field vector. Works together with By and Bz to determine how the solar wind interacts with Earth.',
+      graphData: [],
+      effects: ['Magnetic field orientation', 'Solar wind structure'],
+      causes: ['Solar wind magnetic field', 'CME structure'],
+      safe: ['Normal orientation', 'Stable field'],
+      notSafe: ['Unusual orientation', 'CME structure'],
+      alerts: [],
+      color: '#a855f7',
+      animationType: 'particle',
+      bx: realtimeData?.bx_gsm,
+      bz: realtimeData?.bz_gsm,
+      bt: realtimeData?.bt
+    },
+    {
+      name: 'By Component',
+      fullForm: 'IMF By (GSM coordinates)',
+      value: realtimeData?.by_gsm ?? null,
+      unit: 'nT',
+      range: { min: -20, max: 20 },
+      average: 0,
+      limit: { normal: 5, warning: 10, danger: 15 },
+      definition: 'North-south component in the horizontal plane. Works with Bz to determine storm potential.',
+      detailedInfo: 'Part of the 3D magnetic field. Large values can indicate twisted magnetic fields from CMEs.',
+      graphData: [],
+      effects: ['Magnetic field structure', 'CME detection'],
+      causes: ['Solar wind variations', 'CME magnetic fields'],
+      safe: ['Normal values', 'Stable field'],
+      notSafe: ['Enhanced values', 'CME possible'],
+      alerts: [],
+      color: '#f472b6',
+      animationType: 'particle',
+      by: realtimeData?.by_gsm,
+      bz: realtimeData?.bz_gsm,
+      bt: realtimeData?.bt
+    },
+    {
+      name: 'Wind Longitude',
+      fullForm: 'Solar Wind Longitude (GSM)',
+      value: realtimeData?.lon_gsm ?? null,
+      unit: '°',
+      range: { min: -180, max: 180 },
+      average: 0,
+      limit: { normal: 45, warning: 90, danger: 135 },
+      definition: 'Longitude direction of the solar wind flow. Shows which direction particles are coming from.',
+      detailedInfo: 'Measured in degrees. 0° means coming straight from the Sun. Large angles mean the wind is coming from the side.',
+      graphData: [],
+      effects: ['Wind direction', 'Impact angle', 'Magnetosphere interaction'],
+      causes: ['Solar wind source location', 'CME trajectory'],
+      safe: ['Normal direction', 'Direct flow'],
+      notSafe: ['Side impact', 'Unusual angle'],
+      alerts: [],
+      color: '#14b8a6',
+      animationType: 'particle',
+      lon: realtimeData?.lon_gsm,
+      lat: realtimeData?.lat_gsm
+    },
+    {
+      name: 'Wind Latitude',
+      fullForm: 'Solar Wind Latitude (GSM)',
+      value: realtimeData?.lat_gsm ?? null,
+      unit: '°',
+      range: { min: -90, max: 90 },
+      average: 0,
+      limit: { normal: 30, warning: 45, danger: 60 },
+      definition: 'Latitude direction of the solar wind flow. Shows if wind is coming from above or below.',
+      detailedInfo: 'Measured in degrees. 0° means coming from the solar equator. Positive = from north, negative = from south.',
+      graphData: [],
+      effects: ['Wind elevation', 'Impact angle', 'Aurora location'],
+      causes: ['Solar wind source', 'CME trajectory'],
+      safe: ['Equatorial flow', 'Normal angle'],
+      notSafe: ['High latitude', 'Unusual angle'],
+      alerts: [],
+      color: '#22d3ee',
+      animationType: 'particle',
+      lon: realtimeData?.lon_gsm,
+      lat: realtimeData?.lat_gsm
+    },
+    {
+      name: 'Solar Wind Temperature',
+      fullForm: 'Solar Wind Proton Temperature',
+      value: realtimeData?.temperature ?? null,
+      unit: 'K',
+      range: { min: 10000, max: 1000000 },
+      average: 100000,
+      limit: { normal: 200000, warning: 500000, danger: 800000 },
+      definition: 'How hot the solar wind particles are. Very hot particles often mean a shock wave passed by.',
+      detailedInfo: 'Normal: 50,000-200,000 Kelvin. Temperatures above 500,000 K usually mean a CME shock or compressed region.',
+      graphData: realtimeData?.history?.timestamps?.map((t: string, i: number) => ({
+        time: new Date(t).toLocaleTimeString(),
+        value: realtimeData.history.temperature[i]
+      })) || [],
+      effects: ['Plasma state', 'Thermal pressure'],
+      causes: ['Solar heating', 'Shocks', 'Compression'],
+      safe: ['Normal temperature', 'Typical plasma'],
+      notSafe: ['Heated plasma', 'Shock passage'],
+      alerts: [],
+      color: '#f97316',
+      animationType: 'particle',
+      temperature: realtimeData?.temperature
+    },
+    {
+      name: 'F10.7 Flux',
+      fullForm: 'Solar Radio Flux at 10.7 cm',
+      value: geomagneticData?.indices?.['F10.7'] ?? null,
+      unit: 'sfu',
+      range: { min: 60, max: 300 },
+      average: 120,
+      limit: { normal: 150, warning: 200, danger: 250 },
+      definition: 'Radio waves from the Sun at 10.7 cm. Higher values mean more sunspots and solar activity.',
+      detailedInfo: 'Measured in solar flux units (sfu). Correlates with sunspot number. High values mean more active Sun, which affects Earth\'s atmosphere.',
+      graphData: [],
+      effects: ['Solar activity level', 'Ionospheric conditions', 'Satellite drag'],
+      causes: ['Sunspots', 'Active regions', 'Solar cycle'],
+      safe: ['Low solar activity', 'Stable ionosphere'],
+      notSafe: ['High solar activity', 'Enhanced drag'],
+      alerts: [],
+      color: '#eab308',
+      animationType: 'particle'
+    },
+    {
+      name: 'Kp Forecast',
+      fullForm: 'Kp Index Forecast',
+      value: geomagneticData?.forecast?.Kp ?? null,
+      unit: '',
+      range: { min: 0, max: 9 },
+      average: 2.5,
+      limit: { normal: 4, warning: 5, danger: 7 },
+      definition: 'Predicted Kp index for the next few hours. Helps prepare for upcoming storms.',
+      detailedInfo: 'Forecast based on current solar wind conditions. Values above 5 mean prepare for moderate storms, above 7 means severe storms coming.',
+      graphData: [],
+      effects: ['Future geomagnetic activity', 'Storm preparation'],
+      causes: ['Current solar wind', 'CME arrival prediction'],
+      safe: ['Low forecast', 'No storm expected'],
+      notSafe: ['High forecast', 'Storm coming'],
+      alerts: [],
+      color: '#fbbf24',
+      animationType: 'geomagnetic',
+      kp: geomagneticData?.forecast?.Kp,
+      dst: geomagneticData?.indices?.Dst
+    },
+    {
+      name: 'Ap Index',
+      fullForm: 'Planetary Ap Index',
+      value: geomagneticData?.indices?.Ap ?? null,
+      unit: '',
+      range: { min: 0, max: 400 },
+      average: 10,
+      limit: { normal: 15, warning: 30, danger: 50 },
+      definition: 'Daily average of geomagnetic activity. Higher values mean more active day.',
+      detailedInfo: 'Average of 8 Kp values per day. Values above 30 mean active day, above 50 mean very active day with possible storms.',
+      graphData: [],
+      effects: ['Daily activity level', 'Aurora chances'],
+      causes: ['Solar wind activity', 'CME impacts'],
+      safe: ['Quiet day', 'Low activity'],
+      notSafe: ['Active day', 'Possible storms'],
+      alerts: [],
+      color: '#fb923c',
+      animationType: 'geomagnetic',
+      kp: geomagneticData?.indices?.Kp,
+      dst: geomagneticData?.indices?.Dst
+    },
+    {
+      name: 'Solar Flares',
+      fullForm: 'Recent Solar Flare Activity',
+      value: solarFlaresData?.data?.length ?? null,
+      unit: ' events',
+      range: { min: 0, max: 20 },
+      average: 2,
+      limit: { normal: 5, warning: 10, danger: 15 },
+      definition: 'Number of recent solar flares. Flares are explosions on the Sun that send radiation and particles.',
+      detailedInfo: 'Solar flares are classified by size: C (small), M (medium), X (large). X-class flares can cause radio blackouts and radiation storms.',
+      graphData: [],
+      effects: ['Radiation storms', 'Radio blackouts', 'CME production'],
+      causes: ['Magnetic reconnection', 'Sunspot activity'],
+      safe: ['Few flares', 'Low activity'],
+      notSafe: ['Many flares', 'High activity'],
+      alerts: [],
+      color: '#dc2626',
+      animationType: 'image'
+    },
+    {
+      name: 'LASCO C3',
+      fullForm: 'LASCO C3 Coronagraph Images',
+      value: lascoImages?.images?.length ?? null,
+      unit: ' images',
+      range: { min: 0, max: 10 },
+      average: 5,
+      limit: { normal: 5, warning: 7, danger: 10 },
+      definition: 'Images from LASCO C3 showing the Sun\'s outer atmosphere. Can see CMEs leaving the Sun.',
+      detailedInfo: 'LASCO (Large Angle and Spectrometric Coronagraph) blocks the bright Sun to see faint CMEs. C3 has a wide field of view.',
+      graphData: [],
+      effects: ['CME detection', 'Solar activity monitoring'],
+      causes: ['Solar eruptions', 'CME events'],
+      safe: ['Normal corona', 'No CMEs'],
+      notSafe: ['CME visible', 'Eruption detected'],
+      alerts: [],
+      color: '#7c3aed',
+      animationType: 'image'
+    },
+    {
+      name: 'SUVI 094',
+      fullForm: 'SUVI 94 Angstrom Solar Images',
+      value: suviImages?.images?.length ?? null,
+      unit: ' images',
+      range: { min: 0, max: 10 },
+      average: 5,
+      limit: { normal: 5, warning: 7, danger: 10 },
+      definition: 'Images of the Sun in extreme ultraviolet light. Shows hot plasma and active regions.',
+      detailedInfo: 'SUVI (Solar Ultraviolet Imager) takes images at different wavelengths. 94 Å shows very hot plasma (6 million K) and active regions.',
+      graphData: [],
+      effects: ['Active region monitoring', 'Flare prediction'],
+      causes: ['Solar activity', 'Active regions'],
+      safe: ['Quiet Sun', 'Low activity'],
+      notSafe: ['Active regions', 'Flare risk'],
+      alerts: [],
+      color: '#ea580c',
+      animationType: 'image'
+    }
+  ];
+
+  const currentParam = parameters[selectedParam];
+
+  // Fetch all data
+  useEffect(() => {
+    const fetchAllData = async () => {
+      try {
+        setLoading(true);
+        
+        const [realtime, geomagnetic, alerts, flares, lasco, suvi] = await Promise.allSettled([
+          api.getRealtimeData(),
+          api.getLiveGeomagneticStorm(),
+          api.getSpaceWeatherAlerts(),
+          api.getSolarFlaresData(),
+          api.getImageSequenceForGif('lasco-c3', 5),
+          api.getImageSequenceForGif('suvi-094', 5)
+        ]);
+
+        if (realtime.status === 'fulfilled') setRealtimeData(realtime.value);
+        if (geomagnetic.status === 'fulfilled') setGeomagneticData(geomagnetic.value);
+        if (alerts.status === 'fulfilled') setAlertsData(alerts.value);
+        if (flares.status === 'fulfilled') setSolarFlaresData(flares.value);
+        if (lasco.status === 'fulfilled') setLascoImages(lasco.value);
+        if (suvi.status === 'fulfilled') setSuviImages(suvi.value);
+
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAllData();
+    const interval = setInterval(fetchAllData, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  // Show alerts as toasts
+  useEffect(() => {
+    if (alertsData?.success && alertsData?.data?.length > 0) {
+      alertsData.data.slice(0, 3).forEach((alert: any) => {
+        const message = alert.message || alert.description || 'Space weather alert';
+        const isCritical = message.toLowerCase().includes('warning') || message.toLowerCase().includes('storm');
+        
+        toast[isCritical ? 'error' : 'warning'](message, {
+          description: `${alert.issue_datetime || 'Current'}`,
+          duration: 10000
+        });
+      });
+    }
+  }, [alertsData]);
+
+  // Auto-rotate parameters every 20 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSelectedParam((prev) => (prev + 1) % parameters.length);
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [parameters.length]);
+
+  // Navigation handlers
+  const handlePrevious = () => {
+    setSelectedParam((prev) => (prev - 1 + parameters.length) % parameters.length);
+  };
+
+  const handleNext = () => {
+    setSelectedParam((prev) => (prev + 1) % parameters.length);
+  };
+
+  // Get dynamic info for current parameter
+  const dynamicInfo = getDynamicParameterInfo(currentParam);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-400 mx-auto mb-4" />
+          <p className="text-slate-300 text-lg">Loading real-time space weather data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 text-white p-4 overflow-hidden">
+      {/* Animated background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        {[...Array(50)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-white rounded-full"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              opacity: 0.3
+            }}
+            animate={{
+              opacity: [0.3, 0.8, 0.3],
+              scale: [1, 1.5, 1]
+            }}
+            transition={{
+              duration: 3 + Math.random() * 2,
+              repeat: Infinity,
+              delay: Math.random() * 2
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="max-w-[1800px] mx-auto relative z-10">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Phase 1: Live Space Weather Data
+          </h1>
+          <p className="text-slate-400 text-lg">Scientist-Grade Real-Time Analysis & Visualization</p>
+        </motion.div>
+
+        {/* 4-Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Grid 1: Parameter Info with Navigation */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Card className="bg-slate-900/80 backdrop-blur border-slate-700 h-[500px]">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <Button
+                    onClick={handlePrevious}
+                    variant="ghost"
+                    size="icon"
+                    className="hover:bg-slate-800"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                  
+                  <CardTitle className="text-2xl text-center flex-1">
+                    {currentParam.name}
+                  </CardTitle>
+                  
+                  <Button
+                    onClick={handleNext}
+                    variant="ghost"
+                    size="icon"
+                    className="hover:bg-slate-800"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                </div>
+                <CardDescription className="text-center text-base">
+                  {currentParam.fullForm}
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                {/* Current Value */}
+                <div className="text-center p-4 bg-gradient-to-br from-slate-800/50 to-slate-700/50 rounded-lg">
+                  <div className="text-sm text-slate-400 mb-1">Current Value</div>
+                  <div className="text-5xl font-bold" style={{ color: currentParam.color }}>
+                    {currentParam.value !== null ? currentParam.value.toFixed(currentParam.unit === 'nT' ? 1 : currentParam.unit === 'km/s' || currentParam.unit === 'K' ? 0 : 2) : 'N/A'} 
+                    <span className="text-2xl ml-2">{currentParam.unit}</span>
+                  </div>
+                  <Badge 
+                    className="mt-2"
+                    variant={dynamicInfo.status === 'danger' ? 'destructive' : dynamicInfo.status === 'warning' ? 'default' : 'secondary'}
+                  >
+                    {dynamicInfo.statusMessage}
+                  </Badge>
+                </div>
+
+                {/* Parameter Details */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between p-2 bg-slate-800/30 rounded">
+                    <span className="text-slate-400">Range:</span>
+                    <span>{currentParam.range.min} - {currentParam.range.max} {currentParam.unit}</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-slate-800/30 rounded">
+                    <span className="text-slate-400">Average:</span>
+                    <span>{currentParam.average.toFixed(currentParam.unit === 'K' ? 0 : 1)} {currentParam.unit}</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-slate-800/30 rounded">
+                    <span className="text-slate-400">Normal Limit:</span>
+                    <span>{currentParam.limit.normal} {currentParam.unit}</span>
+                  </div>
+                </div>
+
+                {/* Definition */}
+                <div className="p-3 bg-blue-950/30 border border-blue-800/30 rounded-lg">
+                  <div className="text-xs text-blue-400 mb-1 font-semibold">DEFINITION</div>
+                  <div className="text-sm text-slate-300">{currentParam.definition}</div>
+                </div>
+
+                {/* Detailed Info */}
+                <div className="p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg">
+                  <div className="text-xs text-purple-400 mb-1 font-semibold">TECHNICAL DETAILS</div>
+                  <div className="text-sm text-slate-300">{currentParam.detailedInfo}</div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Grid 2: Real-time Graph */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card className="bg-slate-900/80 backdrop-blur border-slate-700 h-[500px]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Real-Time Graph
+                </CardTitle>
+                <CardDescription>Last 24 hours of {currentParam.name}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {currentParam.graphData && currentParam.graphData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={currentParam.graphData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis 
+                        dataKey="time" 
+                        stroke="#9ca3af"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis 
+                        stroke="#9ca3af"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1e293b', 
+                          border: '1px solid #475569',
+                          borderRadius: '8px'
+                        }}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="value" 
+                        stroke={currentParam.color}
+                        strokeWidth={2}
+                        name={`${currentParam.name} (${currentParam.unit})`}
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[350px] flex items-center justify-center text-slate-400">
+                    <div className="text-center">
+                      <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No graph data available for this parameter</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Grid 3: Animations/Images */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <Card className="bg-slate-900/80 backdrop-blur border-slate-700 h-[500px]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {currentParam.animationType === 'image' ? <ImageIcon className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
+                  {currentParam.animationType === 'image' ? 'Live Images' : '3D Visualization'}
+                </CardTitle>
+                <CardDescription>
+                  {currentParam.animationType === 'image' 
+                    ? `Real-time ${currentParam.name} images` 
+                    : 'Parameter-specific animation'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[400px]">
+                {currentParam.animationType === 'image' ? (
+                  <div className="w-full h-full bg-slate-950/50 rounded-lg overflow-hidden relative">
+                    {currentParam.name === 'LASCO C3' && lascoImages?.images && lascoImages.images.length > 0 ? (
+                      <div className="relative w-full h-full">
+                        <AnimatePresence mode="wait">
+                          <motion.img
+                            key={lascoImages.images[0]?.url || 0}
+                            src={lascoImages.images[0]?.url}
+                            alt="LASCO C3"
+                            className="w-full h-full object-contain"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.5 }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="%231e293b"/><text fill="%239ca3af" x="50%25" y="50%25" text-anchor="middle" dy=".3em">Image loading...</text></svg>';
+                            }}
+                          />
+                        </AnimatePresence>
+                        <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs">
+                          Image 1 of {lascoImages.images.length}
+                        </div>
+                      </div>
+                    ) : currentParam.name === 'SUVI 094' && suviImages?.images && suviImages.images.length > 0 ? (
+                      <div className="relative w-full h-full">
+                        <AnimatePresence mode="wait">
+                          <motion.img
+                            key={suviImages.images[0]?.url || 0}
+                            src={suviImages.images[0]?.url}
+                            alt="SUVI 094"
+                            className="w-full h-full object-contain"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.5 }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect fill="%231e293b"/><text fill="%239ca3af" x="50%25" y="50%25" text-anchor="middle" dy=".3em">Image loading...</text></svg>';
+                            }}
+                          />
+                        </AnimatePresence>
+                        <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs">
+                          Image 1 of {suviImages.images.length}
+                        </div>
+                      </div>
+                    ) : currentParam.name === 'Solar Flares' && solarFlaresData?.data && solarFlaresData.data.length > 0 ? (
+                      <div className="w-full h-full overflow-y-auto p-4 space-y-3">
+                        {solarFlaresData.data.slice(0, 5).map((flare: any, idx: number) => (
+                          <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: idx * 0.1 }}
+                            className="p-3 bg-slate-800/50 rounded-lg border border-orange-500/30"
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <Flame className="h-4 w-4 text-orange-400" />
+                              <span className="font-semibold text-orange-400">
+                                {flare.class || 'Unknown'} Class Flare
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 space-y-1">
+                              <div>Time: {flare.begin_time || flare.peak_time || 'Unknown'}</div>
+                              {flare.peak_time && <div>Peak: {flare.peak_time}</div>}
+                              {flare.source_location && <div>Location: {flare.source_location}</div>}
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-slate-400">
+                        <div className="text-center">
+                          <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>No images available</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-full h-full bg-slate-950/50 rounded-lg overflow-hidden">
+                    <ParameterSpecificAnimation
+                      parameterName={currentParam.name}
+                      value={currentParam.value}
+                      animationType={currentParam.animationType}
+                      lon={currentParam.lon}
+                      lat={currentParam.lat}
+                      density={currentParam.density}
+                      temperature={currentParam.temperature}
+                      bz={currentParam.bz}
+                      bt={currentParam.bt}
+                      bx={currentParam.bx}
+                      by={currentParam.by}
+                      kp={currentParam.kp}
+                      dst={currentParam.dst}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Grid 4: Effects & Safety (Dynamic based on current value) */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            <Card className="bg-slate-900/80 backdrop-blur border-slate-700 h-[500px]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Effects & Safety Analysis
+                </CardTitle>
+                <CardDescription>Based on current value: {currentParam.value !== null ? `${currentParam.value.toFixed(1)} ${currentParam.unit}` : 'N/A'}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 overflow-y-auto max-h-[380px]">
+                {/* Status Badge */}
+                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg">
+                  <span className="font-semibold">Status:</span>
+                  <Badge 
+                    variant={dynamicInfo.status === 'danger' ? 'destructive' : dynamicInfo.status === 'warning' ? 'default' : 'secondary'}
+                    className="text-sm"
+                  >
+                    {dynamicInfo.status.toUpperCase()}
+                  </Badge>
+                </div>
+
+                {/* Effects */}
+                {dynamicInfo.effects && dynamicInfo.effects.length > 0 && (
+                  <div className="p-3 bg-orange-950/30 border border-orange-800/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="h-4 w-4 text-orange-400" />
+                      <div className="text-sm font-semibold text-orange-400">CURRENT EFFECTS</div>
+                    </div>
+                    <ul className="space-y-2">
+                      {dynamicInfo.effects.map((effect, idx) => {
+                        const getIcon = (text: string) => {
+                          const lower = text.toLowerCase();
+                          if (lower.includes('power') || lower.includes('grid') || lower.includes('voltage')) return <Power className="h-4 w-4 text-orange-300" />;
+                          if (lower.includes('satellite') || lower.includes('spacecraft')) return <Satellite className="h-4 w-4 text-orange-300" />;
+                          if (lower.includes('gps') || lower.includes('navigation') || lower.includes('positioning')) return <Navigation className="h-4 w-4 text-orange-300" />;
+                          if (lower.includes('radio') || lower.includes('communication') || lower.includes('hf')) return <Radio className="h-4 w-4 text-orange-300" />;
+                          if (lower.includes('aurora') || lower.includes('northern lights')) return <Sparkles className="h-4 w-4 text-orange-300" />;
+                          if (lower.includes('ionosphere') || lower.includes('tec')) return <Zap className="h-4 w-4 text-orange-300" />;
+                          return <Activity className="h-4 w-4 text-orange-300" />;
+                        };
+                        return (
+                          <li key={idx} className="text-sm text-slate-300 pl-4 border-l-2 border-orange-700 flex items-start gap-2">
+                            <span className="mt-0.5">{getIcon(effect)}</span>
+                            <span>{effect}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Not Safe Conditions */}
+                {dynamicInfo.notSafe && dynamicInfo.notSafe.length > 0 && (
+                  <div className="p-3 bg-red-950/30 border border-red-800/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-4 w-4 text-red-400" />
+                      <div className="text-sm font-semibold text-red-400">PRECAUTIONS REQUIRED</div>
+                    </div>
+                    <ul className="space-y-2">
+                      {dynamicInfo.notSafe.map((item, idx) => {
+                        const getIcon = (text: string) => {
+                          const lower = text.toLowerCase();
+                          if (lower.includes('power') || lower.includes('grid')) return <Power className="h-4 w-4 text-red-300" />;
+                          if (lower.includes('satellite') || lower.includes('spacecraft')) return <Satellite className="h-4 w-4 text-red-300" />;
+                          if (lower.includes('gps') || lower.includes('navigation')) return <Navigation className="h-4 w-4 text-red-300" />;
+                          if (lower.includes('radio') || lower.includes('communication')) return <Radio className="h-4 w-4 text-red-300" />;
+                          if (lower.includes('aviation') || lower.includes('aircraft')) return <Navigation className="h-4 w-4 text-red-300" />;
+                          return <AlertTriangle className="h-4 w-4 text-red-300" />;
+                        };
+                        return (
+                          <li key={idx} className="text-sm text-slate-300 pl-4 border-l-2 border-red-700 flex items-start gap-2">
+                            <span className="mt-0.5">{getIcon(item)}</span>
+                            <span>{item}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Safe Conditions */}
+                {dynamicInfo.safe && dynamicInfo.safe.length > 0 && (
+                  <div className="p-3 bg-green-950/30 border border-green-800/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="h-4 w-4 text-green-400" />
+                      <div className="text-sm font-semibold text-green-400">SAFE CONDITIONS</div>
+                    </div>
+                    <ul className="space-y-2">
+                      {dynamicInfo.safe.map((item, idx) => {
+                        const getIcon = (text: string) => {
+                          const lower = text.toLowerCase();
+                          if (lower.includes('power') || lower.includes('grid')) return <Power className="h-4 w-4 text-green-300" />;
+                          if (lower.includes('satellite')) return <Satellite className="h-4 w-4 text-green-300" />;
+                          if (lower.includes('gps') || lower.includes('navigation')) return <Navigation className="h-4 w-4 text-green-300" />;
+                          if (lower.includes('radio') || lower.includes('communication')) return <Radio className="h-4 w-4 text-green-300" />;
+                          return <Activity className="h-4 w-4 text-green-300" />;
+                        };
+                        return (
+                          <li key={idx} className="text-sm text-slate-300 pl-4 border-l-2 border-green-700 flex items-start gap-2">
+                            <span className="mt-0.5">{getIcon(item)}</span>
+                            <span>{item}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Scientific Details */}
+                {dynamicInfo.scientificDetails && dynamicInfo.scientificDetails.length > 0 && (
+                  <div className="p-3 bg-blue-950/30 border border-blue-800/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Gauge className="h-4 w-4 text-blue-400" />
+                      <div className="text-sm font-semibold text-blue-400">SCIENTIFIC ANALYSIS</div>
+                    </div>
+                    <ul className="space-y-1">
+                      {dynamicInfo.scientificDetails.map((detail, idx) => (
+                        <li key={idx} className="text-sm text-slate-300 pl-4 border-l-2 border-blue-700">
+                          {detail}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* Parameter Selection Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-4 p-4 bg-slate-900/80 backdrop-blur border border-slate-700 rounded-lg"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-slate-400">Select Parameter:</span>
+            <span className="text-xs text-slate-500">Auto-rotating every 20 seconds</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {parameters.map((param, idx) => (
+              <Button
+                key={idx}
+                onClick={() => setSelectedParam(idx)}
+                variant={selectedParam === idx ? 'default' : 'outline'}
+                size="sm"
+                className={`transition-all ${selectedParam === idx ? 'ring-2 ring-blue-500' : ''}`}
+                style={{
+                  backgroundColor: selectedParam === idx ? param.color : 'transparent',
+                  borderColor: param.color
+                }}
+              >
+                {param.name}
+              </Button>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
+export default Phase1;

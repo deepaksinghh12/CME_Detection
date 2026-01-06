@@ -1,0 +1,132 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+  EXTREME SPACE THEME 
+  Designed for maximum visual impact for judges.
+*/
+
+@layer base {
+  :root {
+    --background: 240 30% 6%; /* Deep space blue-black */
+    --foreground: 210 40% 98%;
+
+    --card: 240 25% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 240 25% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 260 100% 65%; /* Electric Purple */
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 190 100% 50%; /* Cyan */
+    --secondary-foreground: 240 30% 6%;
+
+    --muted: 240 20% 15%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 320 100% 60%; /* Hot Pink */
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 100% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 240 30% 20%;
+    --input: 240 30% 15%;
+    --ring: 260 100% 65%;
+
+    --radius: 1rem;
+  }
+
+  body {
+    @apply bg-background text-foreground overflow-x-hidden;
+    background-image: 
+        radial-gradient(circle at 50% 0%, rgba(100, 50, 255, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 0% 50%, rgba(0, 200, 255, 0.1) 0%, transparent 40%),
+        radial-gradient(circle at 100% 50%, rgba(255, 0, 150, 0.1) 0%, transparent 40%),
+        url("data:image/svg+xml,%3Csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='stars' width='200' height='200' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='10' cy='10' r='1' fill='rgba(255,255,255,0.3)'/%3E%3Ccircle cx='50' cy='80' r='0.5' fill='rgba(255,255,255,0.2)'/%3E%3Ccircle cx='120' cy='40' r='1.2' fill='rgba(255,255,255,0.4)'/%3E%3Ccircle cx='160' cy='140' r='0.8' fill='rgba(255,255,255,0.3)'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23stars)'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Glassmorphism Card */
+  .glass-card {
+    @apply bg-black/40 backdrop-blur-xl border border-white/10 shadow-xl rounded-2xl;
+    box-shadow: 
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 20px 50px -10px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease;
+  }
+
+  .glass-card:hover {
+    @apply border-white/20 bg-black/50;
+    box-shadow: 
+        0 0 0 1px rgba(255, 255, 255, 0.1),
+        0 20px 50px -10px rgba(0, 0, 0, 0.6),
+        0 0 30px rgba(120, 100, 255, 0.2);
+    transform: translateY(-5px);
+  }
+
+  /* Neon Text */
+  .text-neon-blue {
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.7), 0 0 20px rgba(0, 240, 255, 0.5);
+  }
+  
+  .text-neon-pink {
+    text-shadow: 0 0 10px rgba(255, 0, 153, 0.7), 0 0 20px rgba(255, 0, 153, 0.5);
+  }
+  
+  .text-neon-purple {
+    text-shadow: 0 0 10px rgba(189, 0, 255, 0.7), 0 0 20px rgba(189, 0, 255, 0.5);
+  }
+
+  /* Gradient Text */
+  .text-gradient-cosmic {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-neon-blue via-neon-purple to-neon-pink;
+  }
+
+  /* Extreme Button */
+  .btn-extreme {
+    @apply relative overflow-hidden bg-transparent border border-white/20 text-white font-bold py-3 px-6 rounded-xl transition-all duration-300;
+    background: linear-gradient(45deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 100%);
+  }
+
+  .btn-extreme::before {
+    content: '';
+    @apply absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent;
+    transform: translateX(-100%) skewX(-15deg);
+    transition: transform 0.5s;
+  }
+
+  .btn-extreme:hover::before {
+    transform: translateX(100%) skewX(-15deg);
+  }
+
+  .btn-extreme:hover {
+    @apply border-neon-blue text-neon-blue;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 100, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 100, 255, 0.6);
+}
+
