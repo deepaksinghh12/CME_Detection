@@ -15,6 +15,7 @@ import Phase4 from "./pages/Phase4";
 import Phase5 from "./pages/Phase5";
 import IntroAnimation from "./components/IntroAnimation";
 import SpaceBackground from "./components/SpaceBackground";
+import DeploymentDisclaimer from "./components/DeploymentDisclaimer";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <DeploymentDisclaimer />
         <SpaceBackground />
         {showIntro && <IntroAnimation onComplete={() => {
           setShowIntro(false);
