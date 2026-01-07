@@ -291,11 +291,11 @@ This project is developed for **Smart India Hackathon (SIH)** presentation.
 **Made for Team Digi Shakti - Smart India Hackathon (SIH)**
 
 ### Team Members
-* Akshat Sharma  
+* Lily Singhal
+* Akshat Sharma
+* Garima Avasthi    
 * Lakshya Sharma  
 * Dhruv Saini  
-* Garima Avasthi  
-* Lily Singhal  
 * Mayank Saini  
 
 
@@ -308,4 +308,5 @@ This project is developed for **Smart India Hackathon (SIH)** presentation.
 *   Aditya L1 mission for solar observation data
 
 > **Note**: This system is designed for educational and research purposes. For operational space weather forecasting, please refer to official space weather agencies.
+
 
