@@ -4,7 +4,7 @@
  * Provides functions to interact with the FastAPI backend
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002';
 
 export interface AnalysisRequest {
   start_date: string;
@@ -514,11 +514,11 @@ async function apiRequest<T>(
   timeout: number = 30000
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   // Create timeout controller
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
+
   try {
     const response = await fetch(url, {
       headers: {
@@ -800,97 +800,97 @@ export const useApi = () => {
   try {
     const { useQuery, useMutation, useQueryClient } = require('@tanstack/react-query');
 
-  return {
-    // Queries
-    useHealthCheck: () => useQuery({
-      queryKey: ['health'],
-      queryFn: api.healthCheck,
-      refetchInterval: false, // DISABLED: Prevent auto-refresh during presentation
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-    }),
+    return {
+      // Queries
+      useHealthCheck: () => useQuery({
+        queryKey: ['health'],
+        queryFn: api.healthCheck,
+        refetchInterval: false, // DISABLED: Prevent auto-refresh during presentation
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
+      }),
 
-    useDataSummary: () => useQuery({
-      queryKey: ['data-summary'],
-      queryFn: api.getDataSummary,
-      refetchInterval: false, // DISABLED: Prevent auto-refresh during presentation
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-    }),
+      useDataSummary: () => useQuery({
+        queryKey: ['data-summary'],
+        queryFn: api.getDataSummary,
+        refetchInterval: false, // DISABLED: Prevent auto-refresh during presentation
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
+      }),
 
-    useParticleData: () => useQuery({
-      queryKey: ['particle-data'],
-      queryFn: api.getParticleData,
-      refetchInterval: false, // DISABLED: Prevent auto-refresh during presentation
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-    }),
+      useParticleData: () => useQuery({
+        queryKey: ['particle-data'],
+        queryFn: api.getParticleData,
+        refetchInterval: false, // DISABLED: Prevent auto-refresh during presentation
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
+      }),
 
-    // Mutations
-    useAnalyzeCME: () => {
-      const queryClient = useQueryClient();
-      return useMutation({
-        mutationFn: api.analyzeCMEEvents,
-        onSuccess: (data) => {
-          // Invalidate and refetch related queries
-          queryClient.invalidateQueries({ queryKey: ['data-summary'] });
-          queryClient.setQueryData(['analysis-result'], data);
-        },
-      });
-    },
+      // Mutations
+      useAnalyzeCME: () => {
+        const queryClient = useQueryClient();
+        return useMutation({
+          mutationFn: api.analyzeCMEEvents,
+          onSuccess: (data) => {
+            // Invalidate and refetch related queries
+            queryClient.invalidateQueries({ queryKey: ['data-summary'] });
+            queryClient.setQueryData(['analysis-result'], data);
+          },
+        });
+      },
 
-    useOptimizeThresholds: () => {
-      const queryClient = useQueryClient();
-      return useMutation({
-        mutationFn: api.optimizeThresholds,
-        onSuccess: (data) => {
-          queryClient.setQueryData(['thresholds'], data.optimized_thresholds);
-        },
-      });
-    },
+      useOptimizeThresholds: () => {
+        const queryClient = useQueryClient();
+        return useMutation({
+          mutationFn: api.optimizeThresholds,
+          onSuccess: (data) => {
+            queryClient.setQueryData(['thresholds'], data.optimized_thresholds);
+          },
+        });
+      },
 
-    useUploadSWISData: () => {
-      const queryClient = useQueryClient();
-      return useMutation({
-        mutationFn: api.uploadSWISData,
-        onSuccess: () => {
-          // Invalidate data-related queries
-          queryClient.invalidateQueries({ queryKey: ['particle-data'] });
-          queryClient.invalidateQueries({ queryKey: ['data-summary'] });
-        },
-      });
-    },
+      useUploadSWISData: () => {
+        const queryClient = useQueryClient();
+        return useMutation({
+          mutationFn: api.uploadSWISData,
+          onSuccess: () => {
+            // Invalidate data-related queries
+            queryClient.invalidateQueries({ queryKey: ['particle-data'] });
+            queryClient.invalidateQueries({ queryKey: ['data-summary'] });
+          },
+        });
+      },
 
-    // ML Analysis mutations
-    useAnalyzeCDFWithML: () => {
-      const queryClient = useQueryClient();
-      return useMutation({
-        mutationFn: api.analyzeCDFWithML,
-        onSuccess: (data) => {
-          // Cache ML analysis results
-          queryClient.setQueryData(['ml-analysis', data.file_info.filename], data);
-          queryClient.invalidateQueries({ queryKey: ['data-summary'] });
-        },
-      });
-    },
+      // ML Analysis mutations
+      useAnalyzeCDFWithML: () => {
+        const queryClient = useQueryClient();
+        return useMutation({
+          mutationFn: api.analyzeCDFWithML,
+          onSuccess: (data) => {
+            // Cache ML analysis results
+            queryClient.setQueryData(['ml-analysis', data.file_info.filename], data);
+            queryClient.invalidateQueries({ queryKey: ['data-summary'] });
+          },
+        });
+      },
 
-    // ML Model info query
-    useMLModelInfo: () => useQuery({
-      queryKey: ['ml-model-info'],
-      queryFn: api.getMLModelInfo,
-      staleTime: 600000, // 10 minutes
-    }),
-  };
+      // ML Model info query
+      useMLModelInfo: () => useQuery({
+        queryKey: ['ml-model-info'],
+        queryFn: api.getMLModelInfo,
+        staleTime: 600000, // 10 minutes
+      }),
+    };
   } catch (e) {
     // Return empty hooks if react-query not available
     return {
       useHealthCheck: () => ({ data: null, isLoading: false, error: null }),
       useDataSummary: () => ({ data: null, isLoading: false, error: null }),
       useParticleData: () => ({ data: null, isLoading: false, error: null }),
-      useAnalyzeCME: () => ({ mutate: () => {}, mutateAsync: async () => ({}) }),
-      useOptimizeThresholds: () => ({ mutate: () => {}, mutateAsync: async () => ({}) }),
-      useUploadSWISData: () => ({ mutate: () => {}, mutateAsync: async () => ({}) }),
-      useAnalyzeCDFWithML: () => ({ mutate: () => {}, mutateAsync: async () => ({}) }),
+      useAnalyzeCME: () => ({ mutate: () => { }, mutateAsync: async () => ({}) }),
+      useOptimizeThresholds: () => ({ mutate: () => { }, mutateAsync: async () => ({}) }),
+      useUploadSWISData: () => ({ mutate: () => { }, mutateAsync: async () => ({}) }),
+      useAnalyzeCDFWithML: () => ({ mutate: () => { }, mutateAsync: async () => ({}) }),
       useMLModelInfo: () => ({ data: null, isLoading: false, error: null }),
     };
   }

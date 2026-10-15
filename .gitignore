@@ -1,7 +1,7 @@
 # Connectivity & Dependencies
 node_modules/
 venv/
-.venv/
+.venv*/
 env/
 __pycache__/
 *.py[cod]

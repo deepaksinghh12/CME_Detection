@@ -8,7 +8,7 @@ data_paths:
   
 # CACTUS CME database settings
 cactus:
-  base_url: "https://wwwbis.sidc.be/cactus/catalog/LASCO/"
+  base_url: "https://www.sidc.be/cactus/catalog/LASCO/"
   halo_angle_threshold: 270  # degrees (halo CMEs > 270°)
   date_range:
     start: "2024-08-01"

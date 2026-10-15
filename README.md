@@ -290,13 +290,19 @@ This project is developed for **Smart India Hackathon (SIH)** presentation.
 ## 👥 Development Team
 **Made for Team Digi Shakti - Smart India Hackathon (SIH)**
 
+**Deepak Singh**
+Responsible for end-to-end development, system architecture, and full-stack implementation of the CME Detection platform.
+
 ### Team Members
-* Lily Singhal
-* Akshat Sharma
-* Garima Avasthi    
-* Lakshya Sharma  
-* Dhruv Saini  
-* Mayank Saini  
+- Lily Singhal
+- Akshat Sharma
+- Garima Avasthi
+- Lakshya Sharma
+- Dhruv Saini
+- Mayank Saini
+
+### Special Thanks
+Thanks to all team members and contributors for their collaboration and contributions to the project.
 
 
 

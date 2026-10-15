@@ -199,7 +199,7 @@ def parse_omni_html_to_csv(html_file_path: str, output_csv_path: str):
 
 
 if __name__ == "__main__":
-    html_file = "downloads/OMNIWeb Results_2.html"
+    html_file = "downloads/OMNIWeb Results latest.html"
     csv_file = "downloads/omni_complete_data.csv"
     
     if not Path(html_file).exists():

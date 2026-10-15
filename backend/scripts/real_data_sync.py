@@ -54,7 +54,7 @@ class RealDataSynchronizer:
                 'data_types': ['swis_l2', 'particle_flux', 'solar_wind']
             },
             'cactus': {
-                'base_url': 'https://wwwbis.sidc.be/cactus/catalog/LASCO',
+                'base_url': 'https://www.sidc.be/cactus/catalog/LASCO',
                 'backup_url': 'https://cdaw.gsfc.nasa.gov/CME_list',
                 'data_types': ['cme_catalog', 'halo_events']
             },
@@ -217,7 +217,7 @@ class RealDataSynchronizer:
             
             # CACTUS CME Catalog - Primary source for real CME data
             try:
-                cactus_url = "https://wwwbis.sidc.be/cactus/catalog/LASCO/2_5_0/qkl/"
+                cactus_url = "https://www.sidc.be/cactus/catalog/LASCO/2_5_0/qkl/"
                 
                 # Format dates for CACTUS catalog
                 start_str = start_dt.strftime('%Y-%m-%d')
@@ -228,8 +228,7 @@ class RealDataSynchronizer:
                 async with aiohttp.ClientSession() as session:
                     # CACTUS provides text-based catalog files
                     catalog_url = f"{cactus_url}{start_dt.year}/catalog.txt"
-                    
-                    async with session.get(catalog_url, timeout=10) as response:
+                    async with session.get(catalog_url, timeout=10, ssl=False) as response:
                         if response.status == 200:
                             catalog_text = await response.text()
                             logger.info(f"SUCCESS: Retrieved CACTUS catalog data")
@@ -305,7 +304,7 @@ class RealDataSynchronizer:
                     
                     import aiohttp
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(donki_url, params=params, timeout=15) as response:
+                        async with session.get(donki_url, params=params, timeout=15, ssl=False) as response:
                             if response.status == 200:
                                 donki_data = await response.json()
                                 logger.info(f"SUCCESS: Retrieved {len(donki_data)} REAL CME events from NASA DONKI (backup)")

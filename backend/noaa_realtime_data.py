@@ -26,21 +26,24 @@ def get_real_solar_wind_data():
     Fetch REAL solar wind data from NOAA (FREE, NO API KEY)
     Returns last 7 days of REAL magnetic field data
     """
-    url = "https://services.swpc.noaa.gov/products/solar-wind/mag-7-day.json"
+    url = "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json"
     
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            data = data[1:]  # Skip header
             
-            df = pd.DataFrame(data, columns=[
-                'time_tag', 'bx_gsm', 'by_gsm', 'bz_gsm', 
-                'lon_gsm', 'lat_gsm', 'bt'
-            ])
+            df = pd.DataFrame(data)
+            
+            # Ensure all required columns exist in the new DataFrame
+            required_cols = ['time_tag', 'bx_gsm', 'by_gsm', 'bz_gsm', 'lon_gsm', 'lat_gsm', 'bt']
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = pd.NA
             
             df['timestamp'] = pd.to_datetime(df['time_tag'])
-            for col in ['bx_gsm', 'by_gsm', 'bz_gsm', 'bt']:
+            # Convert all numeric columns to numeric type
+            for col in ['bx_gsm', 'by_gsm', 'bz_gsm', 'bt', 'lon_gsm', 'lat_gsm']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             
             logger.info(f"✅ Fetched {len(df)} REAL magnetic data points from NOAA")
@@ -61,7 +64,7 @@ def get_real_plasma_data():
     """
     Fetch REAL solar wind plasma data (speed, density, temperature)
     """
-    url = "https://services.swpc.noaa.gov/products/solar-wind/plasma-7-day.json"
+    url = "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json"
     
     try:
         response = requests.get(url, timeout=15)
@@ -121,14 +124,24 @@ def get_real_plasma_data():
                 logger.error(f"❌ Invalid data format: expected list, got {type(data)}")
                 return {'success': False, 'error': 'Invalid data format'}
             
-            data = data[1:]  # Skip header
-            
             # No limit - use all data points
             logger.info(f"📊 Processing {len(data)} data points (no limit)")
             
-            df = pd.DataFrame(data, columns=[
-                'time_tag', 'density', 'speed', 'temperature'
-            ])
+            df = pd.DataFrame(data)
+            
+            # Rename new NOAA RTSW JSON keys to expected column names
+            rename_map = {
+                'proton_speed': 'speed',
+                'proton_density': 'density',
+                'proton_temperature': 'temperature'
+            }
+            df.rename(columns=rename_map, inplace=True)
+            
+            # Ensure columns exist
+            required_cols = ['time_tag', 'density', 'speed', 'temperature']
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = pd.NA
             
             df['timestamp'] = pd.to_datetime(df['time_tag'], errors='coerce')
             for col in ['density', 'speed', 'temperature']:
@@ -165,9 +178,16 @@ def get_dst_index():
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            data = data[1:]  # Skip header
-            
-            df = pd.DataFrame(data, columns=['time_tag', 'dst'])
+            if len(data) > 0 and isinstance(data[0], list):
+                cols = [str(c).lower() for c in data[0]]
+                df = pd.DataFrame(data[1:], columns=cols)
+            else:
+                df = pd.DataFrame(data)
+                
+            col_map = {c: c.lower() for c in df.columns}
+            df.rename(columns=col_map, inplace=True)
+            if 'dst' not in df.columns:
+                df['dst'] = pd.NA
             df['timestamp'] = pd.to_datetime(df['time_tag'])
             df['dst'] = pd.to_numeric(df['dst'], errors='coerce')
             
@@ -194,9 +214,17 @@ def get_kp_index():
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            data = data[1:]  # Skip header
-            
-            df = pd.DataFrame(data, columns=['time_tag', 'kp', 'ap', 'estimated_kp'])
+            if len(data) > 0 and isinstance(data[0], list):
+                cols = [str(c).lower() for c in data[0]]
+                df = pd.DataFrame(data[1:], columns=cols)
+            else:
+                df = pd.DataFrame(data)
+                
+            col_map = {'Kp': 'kp', 'a_running': 'ap'}
+            df.rename(columns=col_map, inplace=True)
+            for col in ['time_tag', 'kp', 'ap', 'estimated_kp']:
+                if col not in df.columns:
+                    df[col] = pd.NA
             df['timestamp'] = pd.to_datetime(df['time_tag'])
             for col in ['kp', 'ap', 'estimated_kp']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -224,9 +252,17 @@ def get_kp_forecast():
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            data = data[1:]  # Skip header
-            
-            df = pd.DataFrame(data, columns=['time_tag', 'kp', 'kp_3h', 'kp_estimated'])
+            if len(data) > 0 and isinstance(data[0], list):
+                cols = [str(c).lower() for c in data[0]]
+                df = pd.DataFrame(data[1:], columns=cols)
+            else:
+                df = pd.DataFrame(data)
+                
+            if 'kp' in df.columns and 'kp_estimated' not in df.columns:
+                df['kp_estimated'] = df['kp']
+            for col in ['time_tag', 'kp', 'kp_3h', 'kp_estimated']:
+                if col not in df.columns:
+                    df[col] = pd.NA
             df['timestamp'] = pd.to_datetime(df['time_tag'])
             for col in ['kp', 'kp_3h', 'kp_estimated']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -258,9 +294,16 @@ def get_f107_flux():
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            data = data[1:]  # Skip header
-            
-            df = pd.DataFrame(data, columns=['time_tag', 'flux'])
+            if len(data) > 0 and isinstance(data[0], list):
+                cols = [str(c).lower() for c in data[0]]
+                df = pd.DataFrame(data[1:], columns=cols)
+            else:
+                df = pd.DataFrame(data)
+                
+            col_map = {c: c.lower() for c in df.columns}
+            df.rename(columns=col_map, inplace=True)
+            if 'flux' not in df.columns:
+                df['flux'] = pd.NA
             df['timestamp'] = pd.to_datetime(df['time_tag'])
             df['flux'] = pd.to_numeric(df['flux'], errors='coerce')
             
