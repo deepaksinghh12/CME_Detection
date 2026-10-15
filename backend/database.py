@@ -154,7 +154,7 @@ def init_sample_data():
     except Exception as e:
         logging.error(f"Error initializing sample data: {e}")
         db.rollback()
-        raise e  # CRITICAL FIX: Re-raise to notify main.py of failure
+        raise e
     finally:
         db.close()
 

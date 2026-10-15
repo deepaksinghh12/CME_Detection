@@ -43,7 +43,7 @@ class OMNIWebDataFetcher:
         "https://spdf.gsfc.nasa.gov/pub/data/omni/low_res_omni/",
         "https://cdaweb.gsfc.nasa.gov/pub/data/omni/omni_cdaweb/hro_1hr/",
     ]
-    MAX_AVAILABLE_DATE = datetime(2025, 11, 24, 23, 0, 0)
+    MAX_AVAILABLE_DATE = datetime(2026, 4, 3, 23, 0, 0)
 
     # Parameter codes - VERIFIED OMNIWeb API codes (from OMNIWeb form)
     # Reference: https://omniweb.gsfc.nasa.gov/form/dx2_adv.html
@@ -1076,6 +1076,7 @@ class OMNIWebDataFetcher:
         
         # Fetch each group separately
         all_dataframes = []
+        consecutive_failures = 0
         for group_name, group_params_list in grouped_params.items():
             if not group_params_list:
                 continue
@@ -1095,11 +1096,21 @@ class OMNIWebDataFetcher:
                 if not group_df.empty:
                     logger.info(f"✅ Group '{group_name}': Fetched {len(group_df)} rows with {len(group_df.columns)-1} parameters")
                     all_dataframes.append(group_df)
+                    consecutive_failures = 0
                 else:
                     logger.warning(f"⚠️ Group '{group_name}': No data returned")
+                    consecutive_failures += 1
+                    if consecutive_failures >= 1: # Break on first complete empty failure to stop hanging
+                        logger.error("❌ Critical network failure: a complete parameter group failed to fetch. Aborting remaining requests to prevent hanging.")
+                        break
             except Exception as e:
                 logger.error(f"❌ Group '{group_name}' fetch failed: {e}")
-                continue
+                if 'Connection aborted' in str(e) or 'timeout' in str(e).lower():
+                    logger.error("❌ Critical connection error. Aborting remaining requests.")
+                    break
+                consecutive_failures += 1
+                if consecutive_failures >= 1:
+                    break
         
         if not all_dataframes:
             logger.error("❌ All parameter groups failed to fetch data")
@@ -1213,6 +1224,9 @@ class OMNIWebDataFetcher:
                     # Extract values (space-separated, need to map columns)
                     # Based on OMNIWeb format: YEAR DOY HR col1 col2 col3 ...
                     row_data = {'timestamp': timestamp}
+                    
+                    # Determine format type based on number of columns
+                    format_type = 'full' if len(parts) > 30 else 'reduced'
                     
                     # Use different column mapping based on format type
                     if format_type == 'reduced':
@@ -1596,8 +1610,11 @@ class OMNIWebDataFetcher:
             "proton_flux_30mev",      # Proton Flux > 30 MeV
             "proton_flux_60mev",      # Proton Flux > 60 MeV
         ]
+        is_recent = (datetime.utcnow() - end_date).total_seconds() < 30 * 24 * 3600
+        should_use_csv = not is_recent
+        
         # Try pre-combined files first (BEST), fallback to CGI API multi-request
-        return self.fetch_data(start_date, end_date, parameters=params, use_csv_approach=True, use_multi_request=True)
+        return self.fetch_data(start_date, end_date, parameters=params, use_csv_approach=should_use_csv, use_multi_request=True)
 
     def merge_with_existing_data(self, omni_data: pd.DataFrame, existing_data: pd.DataFrame) -> pd.DataFrame:
         """Merge OMNIWeb data with an existing dataset on 'timestamp' with preference to OMNI values where missing."""

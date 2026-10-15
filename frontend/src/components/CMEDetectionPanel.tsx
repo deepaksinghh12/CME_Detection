@@ -26,8 +26,15 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CMEDetectionPanel: React.FC = () => {
-  const [startDate, setStartDate] = useState<string>('2025-08-01');
-  const [endDate, setEndDate] = useState<string>('2025-08-29');
+  // Calculate default date range (last 30 days)
+  const today = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  const [startDate, setStartDate] = useState<string>(formatDate(thirtyDaysAgo));
+  const [endDate, setEndDate] = useState<string>(formatDate(today));
   const [analysisType, setAnalysisType] = useState<'full' | 'quick' | 'threshold_only'>('full');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
