@@ -32,21 +32,22 @@ import AllRecentEventsModal from '@/components/AllRecentEventsModal';
 import { api, type DataSummary, type ParticleData, type RecentCMEResponse, type RealtimeData, type RecentCMEEvent } from '@/lib/api';
 
 type LoadingStepKey = 'connection' | 'summary' | 'particle' | 'cme' | 'realtime';
+type StepStatus = 'pending' | 'loading' | 'success' | 'error';
 
-const createInitialLoadingSteps = (): Record<LoadingStepKey, boolean> => ({
-  connection: true,
-  summary: false,
-  particle: false,
-  cme: false,
-  realtime: false,
+const createInitialLoadingSteps = (): Record<LoadingStepKey, StepStatus> => ({
+  connection: 'success',
+  summary: 'loading',
+  particle: 'loading',
+  cme: 'loading',
+  realtime: 'loading',
 });
 
-const loadingStepItems: { key: LoadingStepKey; label: string; delay?: number }[] = [
-  { key: 'connection', label: 'Initializing Connection...', delay: 0 },
-  { key: 'summary', label: 'Received Data Summary', delay: 500 },
-  { key: 'particle', label: 'Received Particle Data', delay: 1000 },
-  { key: 'cme', label: 'Received CME Events', delay: 1500 },
-  { key: 'realtime', label: 'Live Telemetry Linked', delay: 2000 },
+const loadingStepItems: { key: LoadingStepKey; label: string }[] = [
+  { key: 'connection', label: 'Telemetry Connection' },
+  { key: 'summary', label: 'Data Summary' },
+  { key: 'particle', label: 'Particle Flux Data' },
+  { key: 'realtime', label: 'Live Telemetry' },
+  { key: 'cme', label: 'Recent CME Events' },
 ];
 
 // Animation Variants
@@ -101,149 +102,99 @@ const Index = () => {
   const [showRawDataViewer, setShowRawDataViewer] = useState(false);
   const [showAllRecentEventsModal, setShowAllRecentEventsModal] = useState(false);
 
-  const markStepComplete = useCallback((key: LoadingStepKey) => {
-    setLoadingSteps(prev => ({ ...prev, [key]: true }));
-    setCurrentStepIndex(prev => Math.min(prev + 1, loadingStepItems.length - 1));
+  const [cmeLoading, setCmeLoading] = useState(true);
+
+  const markStepStatus = useCallback((key: LoadingStepKey, status: StepStatus) => {
+    setLoadingSteps(prev => ({ ...prev, [key]: status }));
   }, []);
 
-  // Fetch data on component mount - NO RETRY LOGIC
+  // Fetch data on component mount - load independently
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        setLoadingSteps(createInitialLoadingSteps());
-        setCurrentStepIndex(0);
+    let isMounted = true;
+    setError(null);
+    setLoadingSteps(createInitialLoadingSteps());
 
-        // Fetch data summary and particle data in parallel
-        // Add individual error handling to prevent one failure from breaking all
-        const p1 = api.getDataSummary()
-          .then(result => {
-            markStepComplete('summary');
-            return result;
-          })
-          .catch(err => {
-            markStepComplete('summary');
-            console.warn('Data summary fetch failed:', err);
-            return {
-              mission_status: "unknown",
-              data_coverage: "N/A",
-              last_update: new Date().toISOString(),
-              total_cme_events: 0,
-              active_alerts: 0,
-              system_health: "unknown"
-            } as DataSummary;
-          });
-        
-        // Fetch particle data for 7d range (default) - this gets NOAA data with flux proxy
-        const p2 = api.getParticleData('7d')
-          .then(result => {
-            markStepComplete('particle');
-            return result;
-          })
-          .catch(err => {
-            markStepComplete('particle');
-            console.warn('Particle data fetch failed:', err);
-            return null;
-          });
-        
-        const p3 = api.getRecentCMEEvents()
-          .then(result => {
-            markStepComplete('cme');
-            return result;
-          })
-          .catch(err => {
-            markStepComplete('cme');
-            console.warn('CME events fetch failed:', err);
-            return {
-              events: [],
-              total_count: 0,
-              date_range: "Unknown",
-              includes_predictions: false
-            } as RecentCMEResponse;
-          });
-        
-        const p4 = api.getRealtimeData()
-          .then(result => {
-            markStepComplete('realtime');
-            return result;
-          })
-          .catch(err => {
-            markStepComplete('realtime');
-            console.warn('Realtime data fetch failed:', err);
-            return null;
-          });
-        
-        // REMOVED: Don't fetch 90d data on dashboard load - this is unnecessary and slow
-        // Max speed can be calculated from the 7d data we already fetch
-        // const p5 = api.getParticleData('90d')...
+    // 1. Fetch data summary
+    api.getDataSummary()
+      .then(result => {
+        if (!isMounted) return;
+        setDataSummary(result);
+        markStepStatus('summary', 'success');
+      })
+      .catch(err => {
+        if (!isMounted) return;
+        markStepStatus('summary', 'error');
+        console.warn('Data summary fetch failed:', err);
+      });
 
-        // Create a timeout promise (130 seconds - 14-day CME detection takes 35-53s, adding 10s buffer)
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Request timed out after 130 seconds')), 130000)
-        );
-
-        // Try to fetch data with timeout, but allow partial results
-        try {
-          const results = await Promise.race([
-            Promise.all([p1, p2, p3, p4]),
-            timeoutPromise
-          ]) as [DataSummary, ParticleData, RecentCMEResponse, RealtimeData | null];
-          const [summaryData, particleResponse, cmeEvents, realtimeResponse] = results;
-
-          setDataSummary(summaryData);
-          setParticleData(particleResponse);
-          setRecentCMEs(cmeEvents);
-          setRealtimeData(realtimeResponse);
-          
-          // Calculate max speed from 7d data (instead of fetching 90d separately)
-          if (particleResponse && particleResponse.velocity && particleResponse.velocity.length > 0) {
-            const validSpeeds = particleResponse.velocity.filter(v => v > 0 && !isNaN(v) && isFinite(v));
-            if (validSpeeds.length > 0) {
-              const maxSpeed = Math.max(...validSpeeds);
-              const currentSpeed = validSpeeds[validSpeeds.length - 1];
-              const speedData = { max: maxSpeed, current: currentSpeed };
-              setMaxSpeedData(speedData);
-            }
+    // 2. Fetch particle data for 7d range
+    api.getParticleData('7d')
+      .then(result => {
+        if (!isMounted) return;
+        setParticleData(result);
+        markStepStatus('particle', result ? 'success' : 'error');
+        if (result && result.velocity && result.velocity.length > 0) {
+          const validSpeeds = result.velocity.filter(v => v > 0 && !isNaN(v) && isFinite(v));
+          if (validSpeeds.length > 0) {
+            const maxSpeed = Math.max(...validSpeeds);
+            const currentSpeed = validSpeeds[validSpeeds.length - 1];
+            setMaxSpeedData({ max: maxSpeed, current: currentSpeed });
           }
-        } catch (timeoutError) {
-          console.warn('Initial fetch timed out:', timeoutError);
-          setError('Request timed out. Please refresh the page.');
         }
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch data');
-      } finally {
+      })
+      .catch(err => {
+        if (!isMounted) return;
+        markStepStatus('particle', 'error');
+        console.warn('Particle data fetch failed:', err);
+      });
+
+    // 3. Fetch realtime data
+    api.getRealtimeData()
+      .then(result => {
+        if (!isMounted) return;
+        setRealtimeData(result);
+        markStepStatus('realtime', result ? 'success' : 'error');
+      })
+      .catch(err => {
+        if (!isMounted) return;
+        markStepStatus('realtime', 'error');
+        console.warn('Realtime data fetch failed:', err);
+      });
+
+    // 4. Fetch recent CME events independently (slow background detection)
+    setCmeLoading(true);
+    api.getRecentCMEEvents()
+      .then(result => {
+        if (!isMounted) return;
+        setRecentCMEs(result);
+        markStepStatus('cme', 'success');
+        setCmeLoading(false);
+      })
+      .catch(err => {
+        if (!isMounted) return;
+        markStepStatus('cme', 'error');
+        console.warn('CME events fetch failed:', err);
+        setRecentCMEs({
+          events: [],
+          total_count: 0,
+          date_range: "Unavailable",
+          includes_predictions: false
+        });
+        setCmeLoading(false);
+      });
+
+    // Transition out of the full-screen initialization splash screen promptly
+    const splashTimer = setTimeout(() => {
+      if (isMounted) {
         setLoading(false);
       }
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(splashTimer);
     };
-
-    fetchData();
-
-    // REMOVED: All auto-refresh intervals to prevent page reload during presentation
-    // Data will only refresh when user manually navigates or refreshes
-    // const fullRefreshInterval = setInterval(() => {
-    //   fetchData();
-    // }, 600000);
-    // const realtimeRefreshInterval = setInterval(async () => {
-    //   try {
-    //     const realtimeResponse = await api.getRealtimeData();
-    //     if (realtimeResponse) {
-    //       setRealtimeData(realtimeResponse);
-    //     }
-    //     const summaryData = await api.getDataSummary();
-    //     if (summaryData) {
-    //       setDataSummary(summaryData);
-    //     }
-    //   } catch (err) {
-    //     console.warn('Realtime refresh failed:', err);
-    //   }
-    // }, 180000);
-    // return () => {
-    //   clearInterval(fullRefreshInterval);
-    //   clearInterval(realtimeRefreshInterval);
-    // };
-  }, []);
+  }, [markStepStatus]);
 
   // Helper functions for data display
   const getLatestParticleFlux = () => {
@@ -465,30 +416,30 @@ const Index = () => {
             </div>
 
             <div className="mt-5 w-full max-w-xs mx-auto text-left font-mono text-sm bg-black/40 border border-white/5 rounded-lg p-4 shadow-lg shadow-sky-500/10">
-              {loadingStepItems.map((item, index) => {
-                const complete = loadingSteps[item.key];
-                const isActive = index === currentStepIndex;
-                const shouldShow = complete || isActive;
-                if (!shouldShow) {
-                  return null;
-                }
-
+              {loadingStepItems.map((item) => {
+                const status = loadingSteps[item.key];
                 return (
                   <div
                     key={item.key}
                     className={`flex items-center gap-2 py-1 ${
-                      complete
+                      status === 'success'
                         ? 'text-green-400'
-                        : isActive
-                          ? 'text-cyan-300'
-                          : 'text-blue-300/70'
+                        : status === 'error'
+                          ? 'text-red-400'
+                          : 'text-cyan-300'
                     }`}
                   >
                     <span
                       className="w-2 h-2 rounded-full border border-current"
-                      style={{ backgroundColor: complete ? 'currentColor' : 'transparent' }}
+                      style={{ backgroundColor: status === 'success' ? 'currentColor' : 'transparent' }}
                     ></span>
-                    <span>{complete ? `✓ ${item.label}` : `… ${item.label}`}</span>
+                    <span>
+                      {status === 'success'
+                        ? `✓ ${item.label}`
+                        : status === 'error'
+                          ? `✕ ${item.label} (Fallback)`
+                          : `⟳ ${item.label}...`}
+                    </span>
                   </div>
                 );
               })}
@@ -696,7 +647,12 @@ const Index = () => {
                   </div>
 
                   <div className="space-y-3">
-                    {recentCMEs && recentCMEs.events.length > 0 ? (
+                    {cmeLoading ? (
+                      <div className="text-center py-10 space-y-3">
+                        <Loader2 className="h-6 w-6 text-cyan-400 animate-spin mx-auto" />
+                        <p className="text-xs text-gray-400 font-mono">Running scientific CME detection pipeline...</p>
+                      </div>
+                    ) : recentCMEs && recentCMEs.events.length > 0 ? (
                       <>
                         {recentCMEs.events.slice(0, 4).map((event, index) => (
                         <motion.div

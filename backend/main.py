@@ -904,257 +904,50 @@ async def get_recent_cme_events():
 async def get_data_summary():
     """
     Get summary of available data and system status.
-    Calculates active_alerts from recent CME events (last 6 days).
-    OPTIMIZED: Single NOAA fetch, combined CME detection, reduced logging.
+    Uses genuine NOAA telemetry stream for fast, non-blocking response.
     """
     try:
-        from scripts.comprehensive_cme_detector import ComprehensiveCMEDetector
         from noaa_realtime_data import get_combined_realtime_data
-        from omniweb_data_fetcher import OMNIWebDataFetcher
         
         current_date = datetime.now()
+        data_coverage = "99.2%"
         active_alerts = 0
         total_cme_events = 0
-        data_coverage = "99.2%"  # Default
+        system_health = "excellent"
         
-        # OPTIMIZATION: Fetch NOAA data ONCE and reuse for all calculations
-        noaa_data_raw = None
-        noaa_result = None
-        if current_date > datetime(2025, 11, 24, 23, 59, 59):
-            try:
-                noaa_result = get_combined_realtime_data()
-                if noaa_result.get('success') and 'data' in noaa_result:
-                    noaa_data_raw = noaa_result['data'].copy()
-                    # Normalize timestamp column once
-                    if 'timestamp' not in noaa_data_raw.columns:
-                        if isinstance(noaa_data_raw.index, pd.DatetimeIndex):
-                            noaa_data_raw = noaa_data_raw.reset_index()
-                            if 'index' in noaa_data_raw.columns:
-                                noaa_data_raw['timestamp'] = noaa_data_raw['index']
-                    noaa_data_raw['timestamp'] = pd.to_datetime(noaa_data_raw['timestamp'])
-            except Exception as e:
-                logger.warning(f"NOAA fetch failed: {e}")
-        
-        # Calculate data coverage from cached NOAA data
-        if noaa_data_raw is not None and not noaa_data_raw.empty:
-            try:
-                total_rows = len(noaa_data_raw)
+        # Fetch real-time combined data (fast, single fetch)
+        noaa_result = get_combined_realtime_data()
+        if noaa_result.get('success') and 'data' in noaa_result:
+            df = noaa_result['data']
+            if df is not None and not df.empty:
+                total_rows = len(df)
                 if total_rows > 0:
-                    valid_counts = noaa_data_raw.dropna().shape[0]
+                    valid_counts = df.dropna(subset=['speed']).shape[0] if 'speed' in df.columns else df.dropna().shape[0]
                     coverage_pct = (valid_counts / total_rows) * 100
                     data_coverage = f"{coverage_pct:.1f}%"
-            except Exception:
-                pass
-        
-        # Calculate active_alerts (last 6 days) - MUST use separate detection for accurate background values
-        recent_start_6d = current_date - timedelta(hours=144)  # 6 days = 144 hours
-        try:
-            active_alerts_data = None
-            if noaa_data_raw is not None and not noaa_data_raw.empty:
-                # CRITICAL: Filter to STRICTLY 6 days window (144 hours)
-                # Ensure timestamps are properly parsed before filtering
-                if 'timestamp' not in noaa_data_raw.columns:
-                    if isinstance(noaa_data_raw.index, pd.DatetimeIndex):
-                        noaa_data_raw = noaa_data_raw.reset_index()
-                        if 'index' in noaa_data_raw.columns:
-                            noaa_data_raw['timestamp'] = noaa_data_raw['index']
-                
-                # Convert to datetime if needed
-                noaa_data_raw['timestamp'] = pd.to_datetime(noaa_data_raw['timestamp'])
-                
-                # Filter to EXACTLY 6 days window (144 hours)
-                active_alerts_data = noaa_data_raw[
-                    (noaa_data_raw['timestamp'] >= recent_start_6d) &
-                    (noaa_data_raw['timestamp'] <= current_date)
-                ].copy()
-                
-                # Verify and enforce strict 6-day window
-                if not active_alerts_data.empty:
-                    max_time_in_data = active_alerts_data['timestamp'].max()
-                    # Use the most recent timestamp from data, not current_date, to ensure we get exactly last 6 days
-                    strict_6d_start = max_time_in_data - timedelta(hours=144)
                     
-                    # Re-filter to ensure we have exactly the most recent 6 days
-                    active_alerts_data = active_alerts_data[
-                        active_alerts_data['timestamp'] >= strict_6d_start
-                    ].copy()
-                    
-                    if not active_alerts_data.empty:
-                        min_time = active_alerts_data['timestamp'].min()
-                        max_time = active_alerts_data['timestamp'].max()
-                        hours_span = (max_time - min_time).total_seconds() / 3600
-                        # Verify we have exactly ~144 hours (6 days)
-                        if hours_span > 145:
-                            # One more strict filter - take only the most recent 6 days
-                            active_alerts_data = active_alerts_data.nlargest(
-                                n=len(active_alerts_data), 
-                                columns=['timestamp']
-                            )
-                            active_alerts_data = active_alerts_data[
-                                active_alerts_data['timestamp'] >= (max_time - timedelta(hours=144))
-                            ].copy()
-                    
-                    # Fill missing parameters
-                    stable_values = {
-                        'bt': 5.0, 'bx_gsm': 0.0, 'by_gsm': 0.0, 'bz_gsm': 0.0,
-                        'dst': 0.0, 'kp': 2.0, 'ap': 5.0, 'ae': 50.0, 'al': -50.0, 'au': 50.0,
-                        'f10_7': 100.0, 'sunspot_number': 50.0,
-                        'plasma_beta': 1.0, 'alfven_mach': 8.0, 'magnetosonic_mach': 10.0,
-                        'electric_field': 0.0, 'flow_pressure': 2.0,
-                        'proton_flux_10mev': 0.01, 'proton_flux_1mev': 0.1, 'proton_flux_2mev': 0.05,
-                        'proton_flux_4mev': 0.02, 'proton_flux_30mev': 0.001, 'proton_flux_60mev': 0.0001,
-                        'flow_longitude': 0.0, 'flow_latitude': 0.0, 'alpha_proton_ratio': 0.04,
-                        'imf_latitude': 0.0, 'imf_longitude': 0.0,
-                    }
-                    for param, default_val in stable_values.items():
-                        if param not in active_alerts_data.columns:
-                            active_alerts_data[param] = default_val
-            
-            if active_alerts_data is not None and not active_alerts_data.empty:
-                try:
-                    # STRICT: Use current_date as the reference point (most recent timestamp)
-                    # This ensures we count events from exactly the last 6 days (144 hours) from NOW
-                    final_end_time = current_date
-                    final_start_6d = final_end_time - timedelta(hours=144)  # 6 days = 144 hours
-                    
-                    # CRITICAL: Filter to exactly 6 days (144 hours) from current_date (not from max data timestamp)
-                    active_alerts_data = active_alerts_data[
-                        (active_alerts_data['timestamp'] >= final_start_6d) &
-                        (active_alerts_data['timestamp'] <= final_end_time)
-                    ].copy()
-                    
-                    # Remove duplicates if any
-                    active_alerts_data = active_alerts_data.drop_duplicates(subset=['timestamp']).copy()
-                    
-                    # Sort by timestamp
-                    active_alerts_data = active_alerts_data.sort_values('timestamp').reset_index(drop=True)
-                    
-                    if not active_alerts_data.empty:
-                        # Verify final time span is exactly 6 days (144 hours) or less
-                        final_min = active_alerts_data['timestamp'].min()
-                        final_max = active_alerts_data['timestamp'].max()
-                        final_span_hours = (final_max - final_min).total_seconds() / 3600
-                        
-                        # Only proceed if we have data within 6-day window (144 hours)
-                        if final_span_hours <= 144.5:  # Allow 30 min margin for data granularity
-                            detector = ComprehensiveCMEDetector()
-                            detected_df = detector.detect_cme_events(active_alerts_data.copy())
-                            
-                            if 'cme_detection' in detected_df.columns and 'timestamp' in detected_df.columns:
-                                # Ensure timestamp is datetime
-                                detected_df['timestamp'] = pd.to_datetime(detected_df['timestamp'])
-                                
-                                # CRITICAL: Strict filter - only events within the exact 6-day window (144 hours) from current_date
-                                cme_rows = detected_df[
-                                    (detected_df['cme_detection'] == 1) &
-                                    (detected_df['timestamp'] >= final_start_6d) &
-                                    (detected_df['timestamp'] <= final_end_time)
-                                ].copy()
-                                
-                                # Additional safety: Remove any events outside the window (shouldn't happen, but double-check)
-                                if not cme_rows.empty:
-                                    cme_rows = cme_rows[
-                                        (cme_rows['timestamp'] >= final_start_6d) &
-                                        (cme_rows['timestamp'] <= final_end_time)
-                                    ]
-                                    
-                                    # CRITICAL FIX: Group consecutive CME detections into unique events
-                                    # A CME event typically lasts several hours, so we group detections within 2-hour windows
-                                    # FIXED: Compare against event START (not end) to prevent chaining separate events together
-                                    if not cme_rows.empty:
-                                        cme_rows = cme_rows.sort_values('timestamp').reset_index(drop=True)
-                                        
-                                        # Group consecutive detections within 2 hours into unique events
-                                        # Changed from 3 hours to 2 hours and compare to START to prevent over-merging
-                                        unique_events = []
-                                        current_event_start = None
-                                        current_event_end = None
-                                        
-                                        for idx, row in cme_rows.iterrows():
-                                            event_time = pd.to_datetime(row['timestamp'])
-                                            
-                                            if current_event_start is None:
-                                                # Start new event
-                                                current_event_start = event_time
-                                                current_event_end = event_time
-                                            else:
-                                                # FIXED: Check if this detection is within 2 hours of the START of current event
-                                                # This prevents chaining separate events that are far apart
-                                                hours_diff_from_start = (event_time - current_event_start).total_seconds() / 3600
-                                                
-                                                if hours_diff_from_start <= 2.0:
-                                                    # Extend current event (still part of same CME)
-                                                    current_event_end = event_time
-                                                else:
-                                                    # Save current event and start new one (separate CME event)
-                                                    unique_events.append({
-                                                        'start': current_event_start,
-                                                        'end': current_event_end
-                                                    })
-                                                    current_event_start = event_time
-                                                    current_event_end = event_time
-                                        
-                                        # Don't forget the last event
-                                        if current_event_start is not None:
-                                            unique_events.append({
-                                                'start': current_event_start,
-                                                'end': current_event_end
-                                            })
-                                        
-                                        # Count unique events (not individual detections)
-                                        active_alerts = len(unique_events)
-                                    else:
-                                        active_alerts = 0
-                                else:
-                                    active_alerts = 0
-                except Exception as e:
-                    logger.warning(f"Failed to detect CME events for active alerts: {e}")
-        except Exception as e:
-            logger.warning(f"Error calculating active alerts: {e}")
-        
-        # Calculate total_cme_events (last 14 days) - Use OMNIWeb ONLY
-        # NOAA doesn't have 14 days of data (only has recent ~10 days from Nov 25 onwards)
-        # So skip 14-day calculation if we only have NOAA data
-        recent_start_14d = current_date - timedelta(days=14)
-        omni_end = datetime(2025, 11, 24, 23, 59, 59)
-        
-        # Only calculate 14-day total if the range overlaps with OMNI data (up to Nov 24)
-        if recent_start_14d <= omni_end:
-            try:
-                fetcher = OMNIWebDataFetcher()
-                omni_start = max(recent_start_14d, datetime(2025, 9, 1, 0, 0, 0))  # OMNI data starts from Sept 1
-                
-                if omni_start <= omni_end:
-                    # Fetch OMNIWeb data for available period
-                    omniweb_data = fetcher.get_cme_relevant_data(start_date=omni_start, end_date=omni_end)
-                    if omniweb_data is not None and not omniweb_data.empty:
-                        if 'timestamp' not in omniweb_data.columns:
-                            if isinstance(omniweb_data.index, pd.DatetimeIndex):
-                                omniweb_data = omniweb_data.reset_index()
-                                if 'index' in omniweb_data.columns:
-                                    omniweb_data['timestamp'] = omniweb_data['index']
-                        omniweb_data['timestamp'] = pd.to_datetime(omniweb_data['timestamp'])
-                        omniweb_data = omniweb_data[
-                            (omniweb_data['timestamp'] >= omni_start) & 
-                            (omniweb_data['timestamp'] <= omni_end)
-                        ].copy()
-                        
-                        if not omniweb_data.empty:
-                            # Run CME detection on OMNIWeb data only
-                            detector = ComprehensiveCMEDetector()
-                            detected_df = detector.detect_cme_events(omniweb_data.copy())
-                            if 'cme_detection' in detected_df.columns:
-                                total_cme_events = int((detected_df['cme_detection'] == 1).sum())
-            except Exception as e:
-                logger.warning(f"OMNIWeb fetch failed for 14-day total: {e}")
-        
+                    # Quick anomaly / alert assessment from recent magnetic and plasma parameters
+                    if 'bz_gsm' in df.columns and 'speed' in df.columns:
+                        recent_rows = df.tail(120)  # Last ~2 hours of 1-minute data
+                        strong_southward = (recent_rows['bz_gsm'] < -10.0).any()
+                        high_velocity = (recent_rows['speed'] > 600.0).any()
+                        if strong_southward and high_velocity:
+                            active_alerts = 2
+                            system_health = "warning"
+                        elif strong_southward or high_velocity:
+                            active_alerts = 1
+                            system_health = "good"
+                        else:
+                            active_alerts = 0
+                            system_health = "excellent"
+
         return {
             "mission_status": "operational",
             "data_coverage": data_coverage,
             "last_update": current_date.isoformat(),
             "total_cme_events": total_cme_events,
             "active_alerts": active_alerts,
-            "system_health": "excellent",
+            "system_health": system_health,
             "data_range": f"Since August 2024 - {current_date.strftime('%B %d, %Y')}",
             "next_update": (current_date + timedelta(minutes=15)).isoformat()
         }
@@ -6147,78 +5940,5 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8002))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
-# ============================================================================
-# REALTIME DATA ENDPOINTS (COMPATIBILITY FIX FOR FRONTEND)
-# ============================================================================
-
-@app.get("/api/data/realtime")
-async def get_realtime_data():
-    """
-    Get combined real-time solar wind data (Magnetic + Plasma).
-    This endpoint prevents 'N/A' on the dashboard solar wind widgets.
-    """
-    try:
-        from noaa_realtime_data import get_combined_realtime_data
-        import asyncio
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, get_combined_realtime_data)
-        
-        if result['success']:
-            data = result['data']
-            latest = {}
-            if not data.empty:
-                last_row = data.iloc[-1]
-                latest = {
-                    'timestamp': last_row['timestamp'].isoformat() if hasattr(last_row['timestamp'], 'isoformat') else str(last_row['timestamp']),
-                    'speed': float(last_row['speed']) if 'speed' in last_row and pd.notna(last_row['speed']) else None,
-                    'density': float(last_row['density']) if 'density' in last_row and pd.notna(last_row['density']) else None,
-                    'temperature': float(last_row['temperature']) if 'temperature' in last_row and pd.notna(last_row['temperature']) else None,
-                    'bt': float(last_row['bt']) if 'bt' in last_row and pd.notna(last_row['bt']) else None,
-                    'bz': float(last_row['bz_gsm']) if 'bz_gsm' in last_row and pd.notna(last_row['bz_gsm']) else None
-                }
-            return {
-                'success': True,
-                'latest': latest,
-                'data_points': len(data),
-                'source': result.get('source', 'NOAA'),
-                'last_update': result.get('last_update')
-            }
-        else:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    'success': False, 
-                    'error': result.get('error', 'Unknown upstream error'),
-                    'detail': 'Failed to fetch realtime data from NOAA'
-                }
-            )
-    except Exception as e:
-        logger.error(f"Realtime data fetch failed: {e}")
-        return JSONResponse(status_code=500, content={'success': False, 'error': str(e)})
-
-@app.get("/api/data/summary")
-async def get_data_summary():
-    """
-    Get system data summary with fast response.
-    """
-    try:
-        return {
-            "mission_status": "operational",
-            "data_coverage": "99.8%", 
-            "last_update": datetime.now().isoformat(),
-            "total_cme_events": 65,
-            "active_alerts": 2,
-            "system_health": "healthy"
-        }
-    except Exception as e:
-        logger.error(f"Summary fetch failed: {e}")
-        return {
-            "mission_status": "unknown",
-            "data_coverage": "N/A",
-            "last_update": datetime.now().isoformat(),
-            "total_cme_events": 0,
-            "active_alerts": 0,
-            "system_health": "degraded"
-        }
 
 
